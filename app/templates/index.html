@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analysis Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="/static/styles.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container-fluid p-4">
+    <header class="text-center py-4 mb-4">
+        <h1><i class="fas fa-chart-line me-3"></i>Sentiment Analysis Dashboard</h1>
+        <p class="text-muted">Clean, simple, and powerful sentiment analysis</p>
+    </header>
+
+    <!-- Navigation -->
+    <ul class="nav nav-pills nav-fill mb-4" id="mainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="single-tab" data-bs-toggle="pill" data-bs-target="#single" type="button">
+                <i class="fas fa-edit me-2"></i>Single Analysis
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="dashboard-tab" data-bs-toggle="pill" data-bs-target="#dashboard" type="button">
+                <i class="fas fa-chart-pie me-2"></i>Analytics Dashboard
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="mainTabContent">
+        <!-- Single Analysis Tab -->
+        <div class="tab-pane fade show active" id="single" role="tabpanel">
+            <div class="row">
+                <div class="col-md-6">
+                    <!-- Text Analysis Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-keyboard me-2"></i>Text Analysis</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="/analyze" method="post">
+                                <div class="mb-3">
+    <label for="analysisText" class="form-label">Enter text to analyze:</label>
+    <textarea
+        class="form-control"
+        id="analysisText"
+        name="text"
+        rows="6"
+        placeholder="Enter your text here for sentiment analysis..."
+        required
+        maxlength="1000"
+        oninput="updateCharacterCount()"
+    >{{ input_text if input_text else '' }}</textarea>
+    <div class="d-flex justify-content-between align-items-center mt-2">
+        <small class="text-muted">Maximum 1000 characters allowed</small>
+        <small id="charCount" class="text-muted">
+            <span id="currentCount">0</span>/1000 characters
+        </small>
+    </div>
+</div>
+
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search me-2"></i>Analyze Sentiment
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    {% if single_result %}
+<div class="card">
+    <div class="card-header">
+        <h5><i class="fas fa-chart-bar me-2"></i>Analysis Result</h5>
+    </div>
+    <div class="card-body text-center">
+        <div class="mb-3">
+            {% if single_result.sentiment == 'positive' %}
+                <div class="emoji-happy"></div>
+            {% elif single_result.sentiment == 'negative' %}
+                <div class="emoji-sad"></div>
+            {% else %}
+                <div class="emoji-neutral"></div>
+            {% endif %}
+        </div>
+        <h3 class="mb-3 text-primary">{{ single_result.sentiment|title }}</h3>
+        <h4 class="mb-3">{{ "%.0f"|format(single_result.confidence * 100) }}%</h4>
+        <div class="progress mb-3">
+            <div class="progress-bar {% if single_result.sentiment == 'positive' %}bg-success{% elif single_result.sentiment == 'negative' %}bg-danger{% else %}bg-warning{% endif %}"
+                 style="width: {{ (single_result.confidence * 100)|round }}%;">
+            </div>
+        </div>
+       <!-- <small class="text-muted">Method: {{ single_result.method|title }}</small> -->
+    </div>
+</div>
+
+<!-- ADVANCED OPTIONS SECTION -->
+<div class="card mt-3">
+    <div class="card-header">
+        <h5><i class="fas fa-cog me-2"></i>Advanced Options</h5>
+    </div>
+    <div class="card-body">
+        <!-- Sentiment Edit Form -->
+        <form id="edit-sentiment-form" class="mb-3">
+            <input type="hidden" name="session_id" value="">
+            <input type="hidden" name="confidence" value="{{ single_result.confidence }}">
+            <input type="hidden" name="text" value="{{ input_text }}">
+            <input type="hidden" name="original_sentiment" value="{{ single_result.sentiment }}">
+
+            <div class="row align-items-end mb-2">
+                <div class="col-md-4">
+                    <label class="form-label" for="new_sentiment"><i class="fas fa-edit me-1"></i>Override Sentiment:</label>
+                    <select class="form-select" name="new_sentiment" id="new_sentiment">
+                        <option value="positive" {% if single_result.sentiment == 'positive' %}selected{% endif %}>😊 Positive</option>
+                        <option value="negative" {% if single_result.sentiment == 'negative' %}selected{% endif %}>😞 Negative</option>
+                        <option value="neutral" {% if single_result.sentiment == 'neutral' %}selected{% endif %}>😐 Neutral</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Reason (Optional):</label>
+                    <input class="form-control" type="text" name="reason" placeholder="Why are you changing this?">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary w-100" type="submit">
+                        <i class="fas fa-save me-1"></i>Save Edit
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Save Analysis Form -->
+        <form id="save-analysis-form" class="mb-3">
+            <input type="hidden" name="session_id" value="">
+            <input type="hidden" name="text" value="{{ input_text }}">
+            <input type="hidden" name="sentiment" value="{{ single_result.sentiment }}">
+            <input type="hidden" name="confidence" value="{{ single_result.confidence }}">
+            <input type="hidden" name="method" value="{{ single_result.method }}">
+
+            <div class="row align-items-end mb-2">
+                <div class="col-md-5">
+                    <label class="form-label"><i class="fas fa-sticky-note me-1"></i>Notes:</label>
+                    <input class="form-control" type="text" name="notes" placeholder="Add your analysis notes...">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label"><i class="fas fa-tags me-1"></i>Tags:</label>
+                    <input class="form-control" type="text" name="tags" placeholder="urgent, review, follow-up">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-success w-100" type="submit">
+                        <i class="fas fa-bookmark me-1"></i>Save Log
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Action Buttons Row -->
+        <div class="row g-2 mb-3">
+            <div class="col-md-3">
+                <button class="btn btn-outline-info w-100" id="view-history-btn">
+                    <i class="fas fa-history me-1"></i>View History
+                </button>
+            </div>
+           <!-- <div class="col-md-3">
+                <button class="btn btn-primary w-100" id="download-log-excel">
+                    <i class="fas fa-file-excel me-1"></i>Download Excel
+                </button>
+            </div>-->
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" id="download-log-csv">
+                    <i class="fas fa-file-csv me-1"></i>Download CSV
+                </button>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-outline-danger w-100" id="clear-log-btn">
+                    <i class="fas fa-trash me-1"></i>Clear Log
+                </button>
+            </div>
+        </div>
+
+        <!-- Collapsible History Panel -->
+        <div id="edit-log-history-panel" style="display:none;">
+            <hr>
+            <h6><i class="fas fa-list me-2"></i>Session History</h6>
+            <div id="history-content" class="border rounded p-3" style="max-height: 250px; overflow-y: auto; background-color: #f8f9fa;">
+                <em class="text-muted">Loading history...</em>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="single-analysis-status" class="alert" style="display: none; margin-top: 1rem;"></div>
+    </div>
+</div>
+{% endif %}
+
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div class="tab-pane fade" id="dashboard" role="tabpanel">
+            <!-- File Upload Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-file-upload me-2"></i>Upload Data</h5>
+                </div>
+                <div class="card-body">
+                    <form action="/batch_analyze" method="post" enctype="multipart/form-data" id="uploadForm">
+                        <div class="row align-items-end">
+                            <div class="col-md-6">
+                                <label for="file" class="form-label">Upload CSV/Excel file:</label>
+                                <input type="file" class="form-control" id="file" name="file" accept=".csv,.xlsx,.xls" required>
+                                <div class="form-text">File must contain: Company Name, Opportunity Name, Remarks</div>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="fas fa-upload me-2"></i>Upload & Analyze
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                {% if batch_result %}
+                                <button type="button" class="btn btn-outline-primary w-100" onclick="exportData()">
+                                    <i class="fas fa-download me-2"></i>Export Data
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if batch_result %}
+            <!-- Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-chart-pie me-2"></i>Statistics</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <div class="stat-card bg-success">
+                                        <div class="emoji-happy mb-3"></div>
+                                        <div class="stat-number" id="totalPositive">{{ overall_stats.total_pos }}</div>
+                                        <div class="stat-label">Positive</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="stat-card bg-danger">
+                                        <div class="emoji-sad mb-3"></div>
+                                        <div class="stat-number" id="totalNegative">{{ overall_stats.total_neg }}</div>
+                                        <div class="stat-label">Negative</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="stat-card bg-warning">
+                                        <div class="emoji-neutral mb-3"></div>
+                                        <div class="stat-number" id="totalNeutral">{{ overall_stats.total_neu }}</div>
+                                        <div class="stat-label">Neutral</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="stat-card bg-info">
+                                        <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                                        <div class="stat-number" id="totalRecords">{{ overall_stats.total_records }}</div>
+                                        <div class="stat-label">Total</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overall Chart and All Company Statistics -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6><i class="fas fa-pie-chart me-2"></i>Overall Sentiment Distribution</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="overallChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Company Statistics ENHANCED -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6><i class="fas fa-building me-2"></i>All Company Statistics</h6>
+                            <small class="text-muted">{{ companies|length }} Companies</small>
+                        </div>
+                        <div class="card-body">
+                            <div id="companyStatsContainer">
+                                {% for company, stats in company_stats.items() %}
+                                <div class="company-stat-item" id="companyStat-{{ loop.index }}">
+                                    <div class="company-name-header d-flex justify-content-between align-items-center mb-2">
+                                        <span><strong>{{ company }}</strong></span>
+                                        <div class="company-actions d-flex align-items-center gap-2">
+                                            <button class="btn btn-outline-primary view-chart-btn" onclick="showCompanyChart('{{ company }}', {{ loop.index }})">
+                                                <i class="fas fa-chart-pie me-1"></i>View Chart
+                                            </button>
+                                            <button class="btn btn-outline-success sentiment-trend-btn" id="trendBtn-{{ loop.index }}"
+                                                onclick="showSentimentTrend('{{ company }}', {{ loop.index }})"
+                                                title="Show Sentiment Trend">
+                                                <span class="sentiment-icon" id="sentimentIcon-{{ loop.index }}">📈</span>
+                                                <span class="btn-text d-none d-md-inline">Trend</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="row text-center">
+                                        <div class="col-3">
+                                            <div class="emoji-happy" style="font-size: 1.5rem;"></div>
+                                            <div><span class="badge bg-success">{{ stats.positive }}</span></div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="emoji-sad" style="font-size: 1.5rem;"></div>
+                                            <div><span class="badge bg-danger">{{ stats.negative }}</span></div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="emoji-neutral" style="font-size: 1.5rem;"></div>
+                                            <div><span class="badge bg-warning">{{ stats.neutral }}</span></div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div style="font-size: 1.5rem;">📊</div>
+                                            <div><span class="badge bg-primary">{{ stats.Total }}</span></div>
+                                        </div>
+                                    </div>
+                                    <!-- Sentiment Trend Container (Expandable) -->
+                                    <div class="sentiment-trend-container" id="sentimentTrend-{{ loop.index }}" style="display: none;"></div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Company Chart Modal -->
+            <div class="modal fade" id="companyChartModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="companyChartTitle">Company Sentiment Chart</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="chart-container">
+                                <canvas id="companyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add New Remark -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6><i class="fas fa-plus-circle me-2"></i>Add New Remark</h6>
+                </div>
+                <div class="card-body">
+                    <form id="addRemarkForm">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <input type="text" class="form-control" id="company" name="company" placeholder="Company Name" required>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" class="form-control" id="opportunity" name="opportunity" placeholder="Opportunity Name" required>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="remark" name="remark" placeholder="Enter your remark..." required>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary w-100" id="addRemarkBtn">
+                                    <i class="fas fa-plus me-1"></i>Add
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="addRemarkMessage" class="mt-3"></div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-table me-2"></i>Analysis Results</h5>
+                </div>
+                <div class="card-body">
+                     <div class="row mb-4">
+                            <div class="col-md-3">
+                                <label class="form-label">Filter by Company</label>
+                                <select class="form-select" id="companyFilter" onchange="applyFilters()">
+                                    <option value="all">All Companies</option>
+                                    {% for company in companies %}
+                                    <option value="{{ company }}" {% if company == selected_company %}selected{% endif %}>{{ company }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Filter by Sentiment</label>
+                                <select class="form-select" id="sentimentFilter" onchange="applyFilters()">
+                                    <option value="all">All Sentiments</option>
+                                    <option value="positive" {% if selected_sentiment == 'positive' %}selected{% endif %}>😊 Positive</option>
+                                    <option value="negative" {% if selected_sentiment == 'negative' %}selected{% endif %}>😞 Negative</option>
+                                    <option value="neutral" {% if selected_sentiment == 'neutral' %}selected{% endif %}>😐 Neutral</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Search</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="searchInput" placeholder="Search..." value="{{ search_query if search_query is defined else '' }}">
+                                    <button class="btn btn-outline-primary" onclick="applyFilters()">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="clearFilters()">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        <th>Opportunity</th>
+                                        <th>Remarks</th>
+                                        <th>Sentiment</th>
+                                        <th>Confidence</th>
+                                       <!-- <th>Method</th> -->
+                                    </tr>
+                                </thead>
+                                <tbody id="dataTableBody">
+                                    {% for row in data %}
+                                    <tr>
+                                        <td><strong>{{ row['Company Name'] }}</strong></td>
+                                        <td>{{ row['Opportunity Name'] }}</td>
+                                        <td>{{ row['Remarks'][:80] }}{% if row['Remarks']|length > 80 %}...{% endif %}</td>
+                                        <td>
+                                            <div class="sentiment-badge {{ row['Sentiment'] }}">
+                                                <div class="emoji-{{ 'happy' if row['Sentiment'] == 'positive' else ('sad' if row['Sentiment'] == 'negative' else 'neutral') }}" style="font-size: 1.2rem;"></div>
+                                                {{ row['Sentiment']|title }}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{% if row['Confidence'] >= 0.8 %}success{% elif row['Confidence'] >= 0.6 %}warning{% else %}danger{% endif %}">
+                                                {{ "%.0f"|format(row['Confidence'] * 100) }}%
+                                            </span>
+                                        </td>
+                                       <!-- <td>
+                                            <small class="text-muted">{{ row['Method']|title }}</small>
+                                        </td>-->
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            <i class="fas fa-search fa-2x mb-2"></i><br>
+                                            No data found
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        {% if total_pages > 1 %}
+                        <nav class="mt-4">
+                            <ul class="pagination justify-content-center" id="paginationContainer">
+                                {% if page > 1 %}
+                                <li class="page-item">
+                                    <a class="page-link" href="#" onclick="loadPage({{ page - 1 }})">Previous</a>
+                                </li>
+                                {% endif %}
+
+                                {% for p in range(1, total_pages + 1) %}
+                                <li class="page-item {% if p == page %}active{% endif %}">
+                                    <a class="page-link" href="#" onclick="loadPage({{ p }})">{{ p }}</a>
+                                </li>
+                                {% endfor %}
+
+                                {% if page < total_pages %}
+                                <li class="page-item">
+                                    <a class="page-link" href="#" onclick="loadPage({{ page + 1 }})">Next</a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
+
+                        <div class="text-center text-muted mt-3" id="recordsInfo">
+                            Showing {{ data|length }} of {{ total_records }} records
+                        </div>
+
+                    <!-- Filters -->
+                    <!-- ...Keep your filter code as before... -->
+                    <!-- Results Table, Pagination, Info as before... -->
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript code for interactive features -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let openTrendContainers = new Set();
+
+function getSentimentIcon(sentiment) {
+    const icons = { 'positive': '📈', 'negative': '📉', 'neutral': '➡️' };
+    return icons[sentiment] || '📊';
+}
+
+async function showSentimentTrend(companyName, index) {
+    const trendContainer = document.getElementById(`sentimentTrend-${index}`);
+    const sentimentIcon = document.getElementById(`sentimentIcon-${index}`);
+
+    if (openTrendContainers.has(index)) {
+        trendContainer.style.display = 'none';
+        openTrendContainers.delete(index);
+        sentimentIcon.textContent = '📈';
+        return;
+    }
+    openTrendContainers.forEach(openIndex => {
+        if (openIndex !== index) {
+            document.getElementById(`sentimentTrend-${openIndex}`).style.display = 'none';
+            document.getElementById(`sentimentIcon-${openIndex}`).textContent = '📈';
+        }
+    });
+    openTrendContainers.clear();
+
+    trendContainer.style.display = 'block';
+    trendContainer.innerHTML = `
+        <div class="sentiment-loading">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Analyzing ${companyName} sentiment trends...</div>
+        </div>
+    `;
+    try {
+        const response = await fetch(`/company_sentiment_analysis/${encodeURIComponent(companyName)}`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+        const data = result.data;
+        sentimentIcon.textContent = getSentimentIcon(data.overall_sentiment);
+        renderSentimentTrend(data, index);
+        openTrendContainers.add(index);
+    } catch (error) {
+        trendContainer.innerHTML = `<div class="alert alert-danger">Unable to load sentiment analysis.<br>${error.message}</div>`;
+    }
+}
+
+function renderSentimentTrend(data, index) {
+    const overallSentiment = data.overall_sentiment;
+    const trendEmoji = getSentimentIcon(overallSentiment);
+    document.getElementById(`sentimentTrend-${index}`).innerHTML = `
+        <div class="trend-header d-flex justify-content-between align-items-center mb-2">
+            <h6 class="trend-title">
+                <span class="trend-emoji">${trendEmoji}</span>
+                Sentiment Trend Analysis
+            </h6>
+            <div class="overall-sentiment-badge ${overallSentiment}">
+                <span>${trendEmoji}</span>
+                <span>${overallSentiment.toUpperCase()}</span>
+                <span>(${data.overall_confidence}%)</span>
+            </div>
+        </div>
+        <div class="trend-chart-container mb-3">
+            <canvas id="trendCanvas-${index}"></canvas>
+        </div>
+        <div class="trend-summary row">
+            <div class="col">
+                <div class="summary-item">
+                    <div class="summary-value">${data.total_remarks}</div>
+                    <div class="summary-label">Total Remarks</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="summary-item">
+                    <div class="summary-value">${data.sentiment_scores.positive.toFixed(1)}%</div>
+                    <div class="summary-label">Positive Weight</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="summary-item">
+                    <div class="summary-value">${data.sentiment_scores.negative.toFixed(1)}%</div>
+                    <div class="summary-label">Negative Weight</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="summary-item">
+                    <div class="summary-value">${data.sentiment_scores.neutral.toFixed(1)}%</div>
+                    <div class="summary-label">Neutral Weight</div>
+                </div>
+            </div>
+        </div>
+    `;
+    createTrendLineChart(data, index);
+}
+
+function createTrendLineChart(data, index) {
+    const ctx = document.getElementById(`trendCanvas-${index}`).getContext('2d');
+    if (window[`trendChart${index}`]) window[`trendChart${index}`].destroy();
+    window[`trendChart${index}`] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.confidence_ranges,
+            datasets: [
+                {
+                    label: 'Positive',
+                    data: data.sentiment_distribution.positive,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16,185,129,0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Negative',
+                    data: data.sentiment_distribution.negative,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239,68,68,0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Neutral',
+                    data: data.sentiment_distribution.neutral,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245,158,11,0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            animation: { duration: 2000, easing: 'easeInOutQuart' },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { usePointStyle: true } },
+                title: { display: true, text: 'Sentiment Distribution Across Confidence Ranges', font: { size: 14, weight: 'bold' }, color: '#1f2937' }
+            },
+            scales: {
+                x: { title: { text: 'Confidence Ranges', display: true }, grid: { color: '#e5e7eb' } },
+                y: { beginAtZero: true, title: { text: 'Number of Remarks', display: true }, grid: { color: '#e5e7eb' } }
+            }
+        }
+    });
+}
+</script>
+<!-- End of updated index.html -->
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentFilters = {
+            company: '{{ selected_company }}',
+            sentiment: '{{ selected_sentiment }}',
+            search: '{{ search_query if search_query is defined else "" }}',
+            page: {{ page if page is defined else 1 }}
+        };
+
+        let companyPieData = {{ (company_pie_data if company_pie_data is defined else {})|tojson }};
+        let companyChart;
+
+        // Auto-switch to dashboard tab if batch data exists
+        {% if batch_result %}
+        document.addEventListener('DOMContentLoaded', function() {
+            const dashboardTab = new bootstrap.Tab(document.getElementById('dashboard-tab'));
+            dashboardTab.show();
+        });
+        {% endif %}
+
+        // Initialize charts
+        {% if batch_result %}
+        let overallChart;
+
+        function initializeCharts() {
+            const overallCtx = document.getElementById('overallChart').getContext('2d');
+            const sentimentData = {{ (sentiment_pie_data if sentiment_pie_data is defined else {})|tojson }};
+
+            if (overallChart) {
+                overallChart.destroy();
+            }
+
+            overallChart = new Chart(overallCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [{
+                        data: sentimentData.counts,
+                        backgroundColor: ['#22c55e', '#ef4444', '#f59e0b'],
+                        borderColor: ['#ffffff', '#ffffff', '#ffffff'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 14,
+                                    family: 'Inter'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1f2937',
+                            bodyColor: '#1f2937',
+                            borderColor: '#e5e7eb',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed * 100) / total).toFixed(1) : 0;
+                                    return `${context.label}: ${context.parsed} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Show individual company chart
+        function showCompanyChart(companyName) {
+            const modal = new bootstrap.Modal(document.getElementById('companyChartModal'));
+            document.getElementById('companyChartTitle').textContent = `${companyName} - Sentiment Distribution`;
+
+            // Get company data
+            const data = companyPieData[companyName];
+            if (!data) return;
+
+            const ctx = document.getElementById('companyChart').getContext('2d');
+
+            if (companyChart) {
+                companyChart.destroy();
+            }
+
+            companyChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [{
+                        data: [data.positive, data.negative, data.neutral],
+                        backgroundColor: ['#22c55e', '#ef4444', '#f59e0b'],
+                        borderColor: ['#ffffff', '#ffffff', '#ffffff'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 14,
+                                    family: 'Inter'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1f2937',
+                            bodyColor: '#1f2937',
+                            borderColor: '#e5e7eb',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed * 100) / total).toFixed(1) : 0;
+                                    return `${context.label}: ${context.parsed} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            modal.show();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initializeCharts, 300);
+        });
+        {% endif %}
+
+        // Add remark functionality
+        document.getElementById('addRemarkForm')?.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const addBtn = document.getElementById('addRemarkBtn');
+            const originalText = addBtn.innerHTML;
+            addBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding...';
+            addBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('company', document.getElementById('company').value.trim());
+            formData.append('opportunity', document.getElementById('opportunity').value.trim());
+            formData.append('remark', document.getElementById('remark').value.trim());
+
+            fetch('/add_remark', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const messageDiv = document.getElementById('addRemarkMessage');
+
+                if (data.success) {
+                    messageDiv.innerHTML = `<div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="fas fa-check-circle me-2"></i>
+                        ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>`;
+
+                    document.getElementById('addRemarkForm').reset();
+                    updateAllDataRealTime(data.updated_stats, data.updated_table);
+
+                    setTimeout(() => {
+                        const alert = messageDiv.querySelector('.alert');
+                        if (alert) alert.remove();
+                    }, 4000);
+
+                } else {
+                    messageDiv.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('addRemarkMessage').innerHTML = `<div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Network error. Please try again.
+                </div>`;
+            })
+            .finally(() => {
+                addBtn.innerHTML = originalText;
+                addBtn.disabled = false;
+            });
+        });
+
+        // Real-time update functions
+        function updateAllDataRealTime(stats, tableData) {
+            animateCounter(document.getElementById('totalPositive'), stats.overall_stats.total_pos);
+            animateCounter(document.getElementById('totalNegative'), stats.overall_stats.total_neg);
+            animateCounter(document.getElementById('totalNeutral'), stats.overall_stats.total_neu);
+            animateCounter(document.getElementById('totalRecords'), stats.overall_stats.total_records);
+
+            updateCompanyDropdown(stats.companies);
+            updateCompanyStatsContainer(stats.company_stats);
+            updateCharts(stats.sentiment_pie_data);
+            updateDataTable(tableData.data);
+            updateRecordsInfo(tableData.data.length, tableData.total_records);
+
+            // Update company pie data for individual charts
+            companyPieData = stats.company_pie_data;
+        }
+
+        function animateCounter(element, targetValue) {
+            if (!element) return;
+
+            const startValue = parseInt(element.textContent) || 0;
+            const duration = 1000;
+            const startTime = performance.now();
+
+            function updateCounter(currentTime) {
+                const elapsedTime = currentTime - startTime;
+                const progress = Math.min(elapsedTime / duration, 1);
+                const currentValue = Math.floor(startValue + (targetValue - startValue) * progress);
+                element.textContent = currentValue;
+
+                if (progress < 1) {
+                    requestAnimationFrame(updateCounter);
+                }
+            }
+
+            requestAnimationFrame(updateCounter);
+        }
+
+        function updateCompanyDropdown(companies) {
+            const companyFilter = document.getElementById('companyFilter');
+            if (!companyFilter) return;
+
+            const currentValue = companyFilter.value;
+            const existingCompanies = Array.from(companyFilter.options).map(opt => opt.value);
+
+            companies.forEach(company => {
+                if (!existingCompanies.includes(company)) {
+                    const option = document.createElement('option');
+                    option.value = company;
+                    option.textContent = company;
+                    companyFilter.appendChild(option);
+                }
+            });
+
+            companyFilter.value = currentValue;
+        }
+
+        function updateCompanyStatsContainer(companyStats) {
+            const container = document.getElementById('companyStatsContainer');
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            Object.entries(companyStats).forEach(([company, stats]) => {
+                const item = document.createElement('div');
+                item.className = 'company-stat-item';
+                item.innerHTML = `
+                    <div class="company-name-header">
+                        <span><strong>${company}</strong></span>
+                        <button class="btn btn-outline-primary view-chart-btn" onclick="showCompanyChart('${company}')">
+                            <i class="fas fa-chart-pie me-1"></i>View Chart
+                        </button>
+                    </div>
+                    <div class="row text-center">
+                        <div class="col-3">
+                            <div class="emoji-happy" style="font-size: 1.5rem;"></div>
+                            <div><span class="badge bg-success">${stats.positive || 0}</span></div>
+                        </div>
+                        <div class="col-3">
+                            <div class="emoji-sad" style="font-size: 1.5rem;"></div>
+                            <div><span class="badge bg-danger">${stats.negative || 0}</span></div>
+                        </div>
+                        <div class="col-3">
+                            <div class="emoji-neutral" style="font-size: 1.5rem;"></div>
+                            <div><span class="badge bg-warning">${stats.neutral || 0}</span></div>
+                        </div>
+                        <div class="col-3">
+                            <div style="font-size: 1.5rem;">📊</div>
+                            <div><span class="badge bg-primary">${stats.Total || 0}</span></div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function updateCharts(sentimentPieData) {
+            if (overallChart && sentimentPieData) {
+                overallChart.data.datasets[0].data = sentimentPieData.counts;
+                overallChart.update();
+            }
+        }
+
+        function updateDataTable(data) {
+            const tbody = document.getElementById('dataTableBody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="fas fa-search fa-2x mb-2"></i><br>
+                            No data found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                const remarkText = row.Remarks.length > 80 ?
+                    row.Remarks.substring(0, 80) + '...' : row.Remarks;
+
+                const emojiClass = row.Sentiment === 'positive' ? 'emoji-happy' :
+                                 row.Sentiment === 'negative' ? 'emoji-sad' : 'emoji-neutral';
+
+                const confidenceBadge = row.Confidence >= 0.8 ? 'bg-success' :
+                                       row.Confidence >= 0.6 ? 'bg-warning' : 'bg-danger';
+
+                tr.innerHTML = `
+                    <td><strong>${row['Company Name']}</strong></td>
+                    <td>${row['Opportunity Name']}</td>
+                    <td>${remarkText}</td>
+                    <td>
+                        <div class="sentiment-badge ${row.Sentiment}">
+                            <div class="${emojiClass}" style="font-size: 1.2rem;"></div>
+                            ${row.Sentiment.charAt(0).toUpperCase() + row.Sentiment.slice(1)}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge ${confidenceBadge}">
+                            ${Math.round(row.Confidence * 100)}%
+                        </span>
+                    </td>
+                    <td>
+                        <small class="text-muted">${row.Method.charAt(0).toUpperCase() + row.Method.slice(1)}</small>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateRecordsInfo(showing, total) {
+            const recordsInfo = document.getElementById('recordsInfo');
+            if (recordsInfo) {
+                recordsInfo.textContent = `Showing ${showing} of ${total} records`;
+            }
+        }
+
+        function applyFilters() {
+            currentFilters.company = document.getElementById('companyFilter').value;
+            currentFilters.sentiment = document.getElementById('sentimentFilter').value;
+            currentFilters.search = document.getElementById('searchInput').value;
+            currentFilters.page = 1;
+
+            const params = new URLSearchParams({
+                page: 1,
+                company: currentFilters.company,
+                search: currentFilters.search,
+                sentiment: currentFilters.sentiment
+            });
+
+            fetch(`/get_current_data?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateDataTable(data.data);
+                        updateRecordsInfo(data.data.length, data.total_records);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function clearFilters() {
+            document.getElementById('companyFilter').value = 'all';
+            document.getElementById('sentimentFilter').value = 'all';
+            document.getElementById('searchInput').value = '';
+            applyFilters();
+        }
+
+        function loadPage(page) {
+            const params = new URLSearchParams({
+                page: page,
+                company: currentFilters.company,
+                search: currentFilters.search,
+                sentiment: currentFilters.sentiment
+            });
+
+            window.location.href = `/filter_data?${params.toString()}`;
+        }
+
+        function exportData() {
+            const params = new URLSearchParams({
+                company: currentFilters.company,
+                sentiment: currentFilters.sentiment
+            });
+
+            fetch(`/export_data?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    const blob = new Blob([data.data], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        document.getElementById('searchInput')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                applyFilters();
+            }
+        });
+    </script>
+<script>
+(function(){
+    // Generate/fetch session_id
+    let session_id = localStorage.getItem('single_analysis_session_id');
+    if(!session_id) {
+        session_id = 'session_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('single_analysis_session_id', session_id);
+    }
+
+    // Set session_id in forms
+    const sessionInputs = document.querySelectorAll("input[name='session_id']");
+    sessionInputs.forEach(el => el.value = session_id);
+
+    // Handle Sentiment Edit Form
+    const editForm = document.getElementById("edit-sentiment-form");
+    if (editForm) {
+        editForm.addEventListener("submit", async function(e){
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            showStatus("Updating sentiment... please wait.", "info");
+
+            try {
+                const response = await fetch("/edit_single_sentiment", {
+                    method: "POST",
+                    body: formData
+                });
+                const result = await response.json();
+
+                if(result.success) {
+                    showStatus("Sentiment updated successfully!", "success");
+                } else {
+                    showStatus("Failed: " + result.message, "danger");
+                }
+            } catch (error) {
+                showStatus("Error: " + error.message, "danger");
+            }
+        });
+    }
+
+    // Handle Save Analysis Form
+    const saveForm = document.getElementById("save-analysis-form");
+    if (saveForm) {
+        saveForm.addEventListener("submit", async function(e){
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            showStatus("Saving analysis...", "info");
+
+            try {
+                const response = await fetch("/save_single_analysis", {
+                    method: "POST",
+                    body: formData
+                });
+                const result = await response.json();
+
+                if(result.success) {
+                    showStatus("Analysis saved to log!", "success");
+                    // Clear form
+                    e.target.reset();
+                    // Reset session_id
+                    const sessionInput = e.target.querySelector("input[name='session_id']");
+                    if (sessionInput) sessionInput.value = session_id;
+                } else {
+                    showStatus("Failed: " + result.message, "danger");
+                }
+            } catch (error) {
+                showStatus("Error: " + error.message, "danger");
+            }
+        });
+    }
+
+    // Download Log (Excel)
+    const downloadExcelBtn = document.getElementById("download-log-excel");
+    if (downloadExcelBtn) {
+        downloadExcelBtn.addEventListener("click", function(){
+            window.open(`/download_single_analysis_log?format=excel&session_id=${session_id}`, '_blank');
+        });
+    }
+
+    // Download Log (CSV)
+    const downloadCsvBtn = document.getElementById("download-log-csv");
+    if (downloadCsvBtn) {
+        downloadCsvBtn.addEventListener("click", async function(){
+            try {
+                const response = await fetch(`/download_single_analysis_log?format=csv&session_id=${session_id}`);
+                const result = await response.json();
+
+                if (result.data) {
+                    const blob = new Blob([result.data], {type: 'text/csv'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = result.filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            } catch (error) {
+                showStatus("Error downloading file: " + error.message, "danger");
+            }
+        });
+    }
+
+    // View History
+    const viewHistoryBtn = document.getElementById("view-history-btn");
+    if (viewHistoryBtn) {
+        viewHistoryBtn.addEventListener("click", async function(){
+            const panel = document.getElementById("edit-log-history-panel");
+            const content = document.getElementById("history-content");
+
+            if (panel.style.display === "none" || panel.style.display === "") {
+                panel.style.display = "block";
+                content.innerHTML = "<em>Loading...</em>";
+
+                try {
+                    const response = await fetch(`/get_analysis_history/${session_id}`);
+                    const result = await response.json();
+
+                    if(result.success && result.history.length > 0) {
+                        content.innerHTML = result.history.map(entry =>
+                            `<div style="border-bottom:1px solid #ddd;padding:8px 0;">
+                                <strong>${entry.action}</strong> - <small class="text-muted">${entry.timestamp}</small>
+                                <br>Sentiment: <span class="badge bg-info">${entry.original_sentiment || entry.sentiment}</span>
+                                ${entry.new_sentiment ? `→ <span class="badge bg-success">${entry.new_sentiment}</span>` : ''}
+                                <br><small>${entry.text.substring(0, 100)}${entry.text.length > 100 ? '...' : ''}</small>
+                                ${entry.reason ? `<br><em>Reason: ${entry.reason}</em>` : ""}
+                                ${entry.notes ? `<br><em>Notes: ${entry.notes}</em>` : ""}
+                            </div>`
+                        ).join("");
+                    } else {
+                        content.innerHTML = "<em class='text-muted'>No history found for this session.</em>";
+                    }
+                } catch (error) {
+                    content.innerHTML = "<em class='text-danger'>Error loading history.</em>";
+                }
+            } else {
+                panel.style.display = "none";
+            }
+        });
+    }
+
+    // Clear Session Log
+    const clearLogBtn = document.getElementById("clear-log-btn");
+    if (clearLogBtn) {
+        clearLogBtn.addEventListener("click", async function(){
+            if(confirm("Are you sure you want to clear your session log? This cannot be undone.")) {
+                try {
+                    const response = await fetch(`/clear_analysis_log?session_id=${session_id}`, {method:"DELETE"});
+                    const result = await response.json();
+
+                    if(result.success) {
+                        showStatus("Session log cleared!", "success");
+                        const historyPanel = document.getElementById("edit-log-history-panel");
+                        if (historyPanel) historyPanel.style.display = "none";
+                    } else {
+                        showStatus(result.message, "danger");
+                    }
+                } catch (error) {
+                    showStatus("Error clearing log: " + error.message, "danger");
+                }
+            }
+        });
+    }
+
+    // Helper function for status messages
+    function showStatus(msg, type) {
+        const panel = document.getElementById("single-analysis-status");
+        if (panel) {
+            panel.style.display = "block";
+            panel.className = "alert alert-"+(type || "info");
+            panel.innerHTML = msg;
+            setTimeout(()=>{
+                panel.style.display="none";
+            }, 4000);
+        }
+    }
+})();
+</script>
+
+<!-- max character 1000 count -->
+<script>
+function updateCharacterCount() {
+    const textarea = document.getElementById('analysisText');
+    const charCountElement = document.getElementById('charCount');
+    const currentCountElement = document.getElementById('currentCount');
+
+    if (textarea && charCountElement && currentCountElement) {
+        const currentLength = textarea.value.length;
+        const maxLength = 1000;
+
+        currentCountElement.textContent = currentLength;
+
+        // Remove existing classes
+        charCountElement.classList.remove('warning', 'danger');
+        textarea.classList.remove('char-limit-warning', 'char-limit-danger');
+
+        // Add appropriate styling based on character count
+        if (currentLength >= maxLength * 0.9) { // 90% of limit
+            charCountElement.classList.add('danger');
+            textarea.classList.add('char-limit-danger');
+        } else if (currentLength >= maxLength * 0.8) { // 80% of limit
+            charCountElement.classList.add('warning');
+            textarea.classList.add('char-limit-warning');
+        }
+    }
+}
+
+// Initialize character count on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateCharacterCount();
+});
+</script>
+
+
+</body>
+</html>

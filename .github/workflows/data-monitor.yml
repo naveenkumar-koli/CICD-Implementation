@@ -1,0 +1,45 @@
+name: Data Change Monitor
+
+on:
+  push:
+    paths:
+      - 'app/data/**'
+      - 'data/**'
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  monitor-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas openpyxl
+
+      - name: Detect new data for training
+        run: |
+          python -c "
+import os
+from datetime import datetime, timedelta
+data_dir = 'app/data' if os.path.exists('app/data') else 'data'
+cutoff_time = datetime.now() - timedelta(days=3)
+found = False
+for root, dirs, files in os.walk(data_dir):
+    for f in files:
+        fp = os.path.join(root, f)
+        if fp.endswith('.csv') or fp.endswith('.xlsx'):
+            if datetime.fromtimestamp(os.path.getmtime(fp)) > cutoff_time:
+                print(f'New data file detected: {fp}')
+                found = True
+if found:
+    print('::notice::New or changed data found.')
+else:
+    print('No new data found.')
+"

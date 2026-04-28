@@ -1,0 +1,38 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Model files (large binaries — track via HF Hub or DVC)
+app/models/*.pkl
+app/models/*_backup_*.pkl
+app/models/training_log.json
+
+# NLTK data (downloaded at runtime)
+app/nltk_data/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+temp_*.xlsx
+temp_*.csv
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
