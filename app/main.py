@@ -35,8 +35,8 @@ import shutil
 import string
 
 # Import the model trainer and utils
-from model_trainer import ModelTrainer
-from utils import EnhancedSentimentAnalyzer, preprocess_text
+from app.model_trainer import ModelTrainer
+from app.utils import EnhancedSentimentAnalyzer, preprocess_text
 from fastapi import HTTPException
 import sys
 
