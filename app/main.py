@@ -37,6 +37,7 @@ import string
 # Import the model trainer and utils
 from app.model_trainer import ModelTrainer
 from app.utils import EnhancedSentimentAnalyzer, preprocess_text
+from app.drift_monitor import DriftMonitor
 from fastapi import HTTPException
 import sys
 
@@ -45,9 +46,10 @@ nltk.download('punkt', quiet=True)
 nltk.download('wordnet', quiet=True)
 nltk.download('stopwords', quiet=True)
 
-# Initialize enhanced sentiment analyzer and model trainer
+# Initialize enhanced sentiment analyzer, model trainer and drift monitor
 sentiment_analyzer = EnhancedSentimentAnalyzer()
 model_trainer = ModelTrainer()
+drift_monitor = DriftMonitor()
 
 # ====================== SIMPLIFIED SCHEDULER SETUP ======================
 
@@ -417,6 +419,21 @@ def predict_sentiment_enhanced(text: str) -> SentimentResponse:
     )
 
 
+# ── /api/health — model health + drift status ────────────────────────────
+@app.get("/api/health")
+async def api_health():
+    """Health check endpoint used by the daily monitor workflow"""
+    drift_status = drift_monitor.check_drift(window_hours=24)
+    model_ok = all([model, vectorizer, encoder])
+    return JSONResponse(status_code=200, content={
+        "status": "ok" if model_ok else "degraded",
+        "model_loaded": model_ok,
+        "model_health": drift_status,
+        "scheduler_enabled": scheduler_enabled,
+        "timestamp": datetime.now().isoformat()
+    })
+
+
 def get_sentiment_emoji(sentiment):
     emoji_map = {
         'positive': '😊',
@@ -770,6 +787,11 @@ async def batch_analyze_api(file: UploadFile = File(...)):
 
         # Store processed data globally
         processed_data = df
+
+        # ── Evidently drift check ─────────────────────────────────────────
+        drift_result = drift_monitor.generate_evidently_report(df)
+        if drift_result.get("drift_detected"):
+            print("[DRIFT] Data drift detected in batch upload — consider retraining")
 
         # Calculate all statistics
         companies, company_stats, overall_stats, sentiment_pie_data, company_pie_data = calculate_statistics(df)

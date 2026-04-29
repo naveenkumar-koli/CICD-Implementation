@@ -28,6 +28,15 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
+# MLflow + DagsHub tracking
+try:
+    import mlflow
+    import mlflow.sklearn
+    import dagshub
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+
 warnings.filterwarnings('ignore')
 
 # Configure logging for scheduled tasks
@@ -238,7 +247,22 @@ class ModelTrainer:
         return stats
 
     def train_model(self, generate_report=False):
-        """Train the sentiment analysis model"""
+        """Train the sentiment analysis model with MLflow + DagsHub tracking"""
+        # ── Setup MLflow tracking via DagsHub ──────────────────────────────
+        if MLFLOW_AVAILABLE:
+            dagshub_user  = os.getenv('DAGSHUB_USER', '')
+            dagshub_token = os.getenv('DAGSHUB_TOKEN', '')
+            dagshub_repo  = os.getenv('DAGSHUB_REPO', 'CICD-Implementation')
+            if dagshub_user and dagshub_token:
+                tracking_uri = (
+                    f"https://dagshub.com/{dagshub_user}/{dagshub_repo}.mlflow"
+                )
+                mlflow.set_tracking_uri(tracking_uri)
+                os.environ['MLFLOW_TRACKING_USERNAME'] = dagshub_user
+                os.environ['MLFLOW_TRACKING_PASSWORD'] = dagshub_token
+                logger.info(f"MLflow tracking → {tracking_uri}")
+            mlflow.set_experiment("sales-sentiment-analysis")
+
         try:
             logger.info("Starting model training...")
 
@@ -314,7 +338,7 @@ class ModelTrainer:
             word2vec_model = None
             try:
                 sentences = [remark.split() for remark in data_clean['processed_remarks']]
-                if len(sentences) > 100:  # This len() is fine - it's on a Python list
+                if len(sentences) > 100:
                     logger.info("Training Word2Vec model...")
                     word2vec_model = Word2Vec(
                         sentences=sentences,
@@ -335,8 +359,7 @@ class ModelTrainer:
                 logger.info("Training LSA model...")
                 lsa_vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
                 X_lsa = lsa_vectorizer.fit_transform(data_clean['processed_remarks'])
-
-                n_components = min(50, X_lsa.shape[1] - 1)  # Ensure valid components
+                n_components = min(50, X_lsa.shape[1] - 1)
                 lsa_model = TruncatedSVD(n_components=n_components, random_state=42)
                 X_lsa_transformed = lsa_model.fit_transform(X_lsa)
                 logger.info(f"LSA components: {n_components}")
@@ -345,10 +368,9 @@ class ModelTrainer:
                 logger.error(f"Error training LSA: {str(e)}")
 
             # Save the models
-            self.save_models(best_model, tfidf_vectorizer, label_encoder, accuracy, word2vec_model, lsa_model,
-                             lsa_vectorizer)
+            self.save_models(best_model, tfidf_vectorizer, label_encoder, accuracy,
+                             word2vec_model, lsa_model, lsa_vectorizer)
 
-            # COMPLETELY FIXED: All values properly handled
             training_result = {
                 'timestamp': datetime.now().isoformat(),
                 'accuracy': float(accuracy),
@@ -357,8 +379,8 @@ class ModelTrainer:
                 'best_params': grid_search.best_params_,
                 'training_samples': int(X_train.shape[0]),
                 'test_samples': int(X_test.shape[0]),
-                'total_samples': int(data_clean.shape[0]),  # FIXED: Use data_clean.shape[0] instead of X_tfidf
-                'classes': [str(cls) for cls in class_names],  # Convert to strings
+                'total_samples': int(data_clean.shape[0]),
+                'classes': [str(cls) for cls in class_names],
                 'tfidf_features': int(X_tfidf.shape[1]),
                 'data_stats': stats if stats else {}
             }
@@ -366,6 +388,38 @@ class ModelTrainer:
             metadata_path = os.path.join(self.models_dir, "training_metadata.json")
             with open(metadata_path, 'w') as f:
                 json.dump(training_result, f, indent=2)
+
+            # ── Log everything to MLflow / DagsHub ────────────────────────
+            if MLFLOW_AVAILABLE:
+                run_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                with mlflow.start_run(run_name=run_name):
+                    # Parameters
+                    mlflow.log_param("max_features", 5000)
+                    mlflow.log_param("ngram_range", "(1,3)")
+                    mlflow.log_param("model_type", "LogisticRegression")
+                    mlflow.log_param("test_size", 0.2)
+                    mlflow.log_param("cv_folds", 5)
+                    mlflow.log_params({
+                        f"best_{k}": v for k, v in grid_search.best_params_.items()
+                    })
+                    # Metrics
+                    mlflow.log_metric("accuracy", float(accuracy))
+                    mlflow.log_metric("cv_f1_weighted", float(cv_scores.mean()))
+                    mlflow.log_metric("cv_f1_std", float(cv_scores.std()))
+                    mlflow.log_metric("training_samples", int(X_train.shape[0]))
+                    mlflow.log_metric("total_samples", int(data_clean.shape[0]))
+                    # Model artifacts
+                    mlflow.sklearn.log_model(best_model, "sentiment_model")
+                    mlflow.log_artifact(
+                        os.path.join(self.models_dir, "tfidf_vectorizer_5000.pkl"),
+                        artifact_path="artifacts"
+                    )
+                    mlflow.log_artifact(
+                        os.path.join(self.models_dir, "label_encoder_5000.pkl"),
+                        artifact_path="artifacts"
+                    )
+                    mlflow.log_artifact(metadata_path, artifact_path="artifacts")
+                    logger.info(f"[MLFLOW] Run logged: {run_name}")
 
             logger.info("Model training completed successfully!")
             return training_result

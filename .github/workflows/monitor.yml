@@ -1,0 +1,94 @@
+name: Model Health Monitor
+
+on:
+  schedule:
+    - cron: '0 8 * * *'    # Every day at 8 AM UTC (1:30 PM IST)
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Check deployed app health
+        id: health
+        env:
+          DEPLOYED_URL: ${{ secrets.DEPLOYED_URL }}
+        run: |
+          python -c "
+          import os, sys, json, requests
+
+          url = os.environ.get('DEPLOYED_URL', '').rstrip('/')
+          if not url:
+              print('DEPLOYED_URL secret not set — skipping live check')
+              sys.exit(0)
+
+          try:
+              resp = requests.get(f'{url}/api/health', timeout=30)
+              data = resp.json()
+              print(json.dumps(data, indent=2))
+
+              health = data.get('model_health', {})
+              status = health.get('status', 'unknown')
+              alerts = health.get('alerts', [])
+
+              print(f'Status: {status}')
+              if alerts:
+                  print('Alerts:')
+                  for a in alerts:
+                      print(f'  - {a}')
+
+              if status == 'alert':
+                  print('DRIFT DETECTED — will trigger retraining')
+                  sys.exit(1)
+              else:
+                  print('Model health: OK')
+
+          except Exception as e:
+              print(f'Health check failed: {e}')
+              # Do not fail the workflow if app is unreachable
+              sys.exit(0)
+          "
+
+      - name: Auto-trigger retraining on drift
+        if: failure() && steps.health.outcome == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Trigger model-training workflow
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'model-training.yml',
+              ref: 'main'
+            });
+            console.log('Retraining workflow triggered due to drift!');
+
+      - name: Create drift alert issue
+        if: failure() && steps.health.outcome == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const today = new Date().toISOString().split('T')[0];
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Model Drift Detected — ${today}`,
+              body: `## Drift Alert\n\n` +
+                    `Daily health check detected model drift on **${today}**.\n\n` +
+                    `**Action taken:** Retraining workflow has been automatically triggered.\n\n` +
+                    `Check the [Actions tab](/${context.repo.owner}/${context.repo.repo}/actions) for progress.\n\n` +
+                    `**Deployed app:** ${{ secrets.DEPLOYED_URL }}`,
+              labels: ['mlops', 'drift', 'auto-retrain']
+            });

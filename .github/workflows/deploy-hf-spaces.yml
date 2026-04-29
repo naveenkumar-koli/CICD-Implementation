@@ -1,0 +1,142 @@
+name: Deploy to HuggingFace Spaces
+
+on:
+  workflow_run:
+    workflows: ["Quality Gate"]
+    types: [completed]
+
+jobs:
+  deploy:
+    # Only deploy if quality gate passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install HuggingFace Hub CLI
+        run: pip install huggingface-hub
+
+      - name: Download trained models from previous workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models
+          path: app/models/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push models to HuggingFace Hub (Model Registry)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+        run: |
+          python -c "
+          import os
+          from huggingface_hub import HfApi, create_repo
+
+          api      = HfApi(token=os.environ['HF_TOKEN'])
+          username = os.environ['HF_USERNAME']
+          repo_id  = f'{username}/sales-sentiment-model'
+
+          # Create model repo if it doesn't exist
+          try:
+              create_repo(repo_id, token=os.environ['HF_TOKEN'], exist_ok=True)
+              print(f'Repo ready: {repo_id}')
+          except Exception as e:
+              print(f'Repo note: {e}')
+
+          # Upload model artifacts
+          files_to_upload = [
+              ('app/models/sentiment_model_5000.pkl',  'sentiment_model_5000.pkl'),
+              ('app/models/tfidf_vectorizer_5000.pkl', 'tfidf_vectorizer_5000.pkl'),
+              ('app/models/label_encoder_5000.pkl',    'label_encoder_5000.pkl'),
+              ('app/models/training_metadata.json',    'training_metadata.json'),
+          ]
+
+          for local_path, repo_path in files_to_upload:
+              if os.path.exists(local_path):
+                  api.upload_file(
+                      path_or_fileobj=local_path,
+                      path_in_repo=repo_path,
+                      repo_id=repo_id,
+                      repo_type='model',
+                  )
+                  print(f'Uploaded: {repo_path}')
+              else:
+                  print(f'Skipped (not found): {local_path}')
+
+          print(f'Model registry updated: https://huggingface.co/{repo_id}')
+          "
+
+      - name: Deploy app to HuggingFace Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+        run: |
+          python -c "
+          import os
+          from huggingface_hub import HfApi, create_repo
+
+          api      = HfApi(token=os.environ['HF_TOKEN'])
+          username = os.environ['HF_USERNAME']
+          space_id = f'{username}/sales-sentiment-api'
+
+          # Create Space if it doesn't exist (Docker type)
+          try:
+              create_repo(
+                  space_id,
+                  token=os.environ['HF_TOKEN'],
+                  repo_type='space',
+                  space_sdk='docker',
+                  exist_ok=True,
+              )
+              print(f'Space ready: {space_id}')
+          except Exception as e:
+              print(f'Space note: {e}')
+
+          # Upload all app files
+          import os
+          from pathlib import Path
+
+          # Upload Dockerfile
+          api.upload_file(
+              path_or_fileobj='Dockerfile',
+              path_in_repo='Dockerfile',
+              repo_id=space_id,
+              repo_type='space',
+          )
+
+          # Upload requirements
+          api.upload_file(
+              path_or_fileobj='requirements.txt',
+              path_in_repo='requirements.txt',
+              repo_id=space_id,
+              repo_type='space',
+          )
+
+          # Upload entire app folder
+          api.upload_folder(
+              folder_path='app',
+              repo_id=space_id,
+              repo_type='space',
+              path_in_repo='app',
+          )
+
+          print(f'Deployed! View at: https://huggingface.co/spaces/{space_id}')
+          "
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Deployment complete!"
+          echo "Model Registry: https://huggingface.co/${{ secrets.HF_USERNAME }}/sales-sentiment-model"
+          echo "Live App: https://huggingface.co/spaces/${{ secrets.HF_USERNAME }}/sales-sentiment-api"

@@ -6,3 +6,14 @@ scikit-learn
 nltk
 python-multipart
 apscheduler
+mlflow
+dagshub
+evidently
+dvc
+huggingface-hub
+matplotlib
+seaborn
+wordcloud
+gensim
+textblob
+openpyxl

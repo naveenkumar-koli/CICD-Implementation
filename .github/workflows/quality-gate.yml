@@ -1,0 +1,93 @@
+name: Quality Gate
+
+on:
+  workflow_run:
+    workflows: ["Automated Model Training"]
+    types: [completed]
+
+jobs:
+  quality-check:
+    # Only run if training succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    outputs:
+      passed: ${{ steps.gate.outputs.passed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download trained models
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models
+          path: app/models/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run quality gate checks
+        id: gate
+        run: |
+          python -c "
+          import json, sys
+
+          try:
+              with open('app/models/training_metadata.json') as f:
+                  meta = json.load(f)
+          except FileNotFoundError:
+              print('ERROR: training_metadata.json not found!')
+              sys.exit(1)
+
+          accuracy  = meta.get('accuracy', 0)
+          f1_score  = meta.get('cv_f1_score', 0)
+          samples   = meta.get('total_samples', 0)
+          timestamp = meta.get('timestamp', 'unknown')
+
+          print('=' * 50)
+          print(f'Training run: {timestamp}')
+          print(f'Total samples: {samples}')
+          print(f'Accuracy : {accuracy:.4f}  (min required: 0.75)')
+          print(f'F1 Score : {f1_score:.4f}  (min required: 0.70)')
+          print('=' * 50)
+
+          passed = accuracy >= 0.75 and f1_score >= 0.70
+
+          if passed:
+              print('QUALITY GATE: PASSED ✅ — deploying new model')
+          else:
+              reasons = []
+              if accuracy < 0.75:
+                  reasons.append(f'Accuracy {accuracy:.4f} < 0.75')
+              if f1_score < 0.70:
+                  reasons.append(f'F1 {f1_score:.4f} < 0.70')
+              print(f'QUALITY GATE: FAILED ❌ — {\" | \".join(reasons)}')
+              sys.exit(1)
+          "
+          echo "passed=true" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Issue on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            let meta = {};
+            try {
+              meta = JSON.parse(fs.readFileSync('app/models/training_metadata.json', 'utf8'));
+            } catch(e) {}
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Model Quality Gate Failed — Deployment Blocked',
+              body: `## Quality Gate Failed\n\n` +
+                    `**Timestamp:** ${meta.timestamp || 'unknown'}\n` +
+                    `**Accuracy:** ${meta.accuracy?.toFixed(4) || 'N/A'} (min: 0.75)\n` +
+                    `**F1 Score:** ${meta.cv_f1_score?.toFixed(4) || 'N/A'} (min: 0.70)\n` +
+                    `**Samples:** ${meta.total_samples || 'N/A'}\n\n` +
+                    `The new model did not meet minimum thresholds.\n` +
+                    `The previous production model is still active.\n\n` +
+                    `[View Actions Run](${context.payload.workflow_run.html_url})`,
+              labels: ['mlops', 'model-quality', 'bug']
+            });
