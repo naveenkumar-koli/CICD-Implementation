@@ -5,9 +5,14 @@ on:
     workflows: ["Automated Model Training"]
     types: [completed]
 
+# Required permissions for cross-workflow artifact download
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
 jobs:
   quality-check:
-    # Only run if training succeeded
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
@@ -18,7 +23,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download trained models
+      - name: Download trained models from training workflow
         uses: actions/download-artifact@v4
         with:
           name: trained-models
@@ -26,18 +31,26 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: List downloaded files (debug)
+        run: |
+          echo "=== Downloaded files ==="
+          find app/models/ -type f 2>/dev/null || echo "No files found in app/models/"
+          ls -la app/models/ 2>/dev/null || echo "Directory empty"
+
       - name: Run quality gate checks
         id: gate
         run: |
           python -c "
-          import json, sys
+          import json, sys, os
 
-          try:
-              with open('app/models/training_metadata.json') as f:
-                  meta = json.load(f)
-          except FileNotFoundError:
+          meta_path = 'app/models/training_metadata.json'
+          if not os.path.exists(meta_path):
               print('ERROR: training_metadata.json not found!')
+              print('Files in app/models/:', os.listdir('app/models/') if os.path.exists('app/models/') else 'DIR NOT FOUND')
               sys.exit(1)
+
+          with open(meta_path) as f:
+              meta = json.load(f)
 
           accuracy  = meta.get('accuracy', 0)
           f1_score  = meta.get('cv_f1_score', 0)
@@ -45,23 +58,23 @@ jobs:
           timestamp = meta.get('timestamp', 'unknown')
 
           print('=' * 50)
-          print(f'Training run: {timestamp}')
-          print(f'Total samples: {samples}')
-          print(f'Accuracy : {accuracy:.4f}  (min required: 0.75)')
-          print(f'F1 Score : {f1_score:.4f}  (min required: 0.70)')
+          print(f'Training run  : {timestamp}')
+          print(f'Total samples : {samples}')
+          print(f'Accuracy      : {accuracy:.4f}  (min: 0.75)')
+          print(f'F1 Score      : {f1_score:.4f}  (min: 0.70)')
           print('=' * 50)
 
           passed = accuracy >= 0.75 and f1_score >= 0.70
 
           if passed:
-              print('QUALITY GATE: PASSED ✅ — deploying new model')
+              print('QUALITY GATE: PASSED - deploying new model')
           else:
               reasons = []
               if accuracy < 0.75:
                   reasons.append(f'Accuracy {accuracy:.4f} < 0.75')
               if f1_score < 0.70:
                   reasons.append(f'F1 {f1_score:.4f} < 0.70')
-              print(f'QUALITY GATE: FAILED ❌ — {\" | \".join(reasons)}')
+              print(f'QUALITY GATE: FAILED - {\" | \".join(reasons)}')
               sys.exit(1)
           "
           echo "passed=true" >> $GITHUB_OUTPUT
@@ -75,7 +88,7 @@ jobs:
             let meta = {};
             try {
               meta = JSON.parse(fs.readFileSync('app/models/training_metadata.json', 'utf8'));
-            } catch(e) {}
+            } catch(e) { console.log('Could not read metadata:', e.message); }
 
             github.rest.issues.create({
               owner: context.repo.owner,
@@ -86,8 +99,6 @@ jobs:
                     `**Accuracy:** ${meta.accuracy?.toFixed(4) || 'N/A'} (min: 0.75)\n` +
                     `**F1 Score:** ${meta.cv_f1_score?.toFixed(4) || 'N/A'} (min: 0.70)\n` +
                     `**Samples:** ${meta.total_samples || 'N/A'}\n\n` +
-                    `The new model did not meet minimum thresholds.\n` +
-                    `The previous production model is still active.\n\n` +
                     `[View Actions Run](${context.payload.workflow_run.html_url})`,
-              labels: ['mlops', 'model-quality', 'bug']
+              labels: ['mlops', 'model-quality']
             });
