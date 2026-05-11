@@ -35,9 +35,15 @@ import shutil
 import string
 
 # Import the model trainer and utils
-from app.model_trainer import ModelTrainer
-from app.utils import EnhancedSentimentAnalyzer, preprocess_text
-from app.drift_monitor import DriftMonitor
+# Note: imports are relative (no 'app.' prefix) because Dockerfile WORKDIR = /app/app
+try:
+    from model_trainer import ModelTrainer
+    from utils import EnhancedSentimentAnalyzer, preprocess_text
+    from drift_monitor import DriftMonitor
+except ImportError:
+    from app.model_trainer import ModelTrainer
+    from app.utils import EnhancedSentimentAnalyzer, preprocess_text
+    from app.drift_monitor import DriftMonitor
 from fastapi import HTTPException
 import sys
 
