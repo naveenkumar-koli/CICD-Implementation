@@ -174,12 +174,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: trained-models
-          path: app/models/
+          path: .
 
       - name: List downloaded model files
         run: |
           echo "=== Model files ready for deploy ==="
-          ls -lh app/models/
+          ls -R app/models/
 
       - name: Push models to HuggingFace Hub (Model Registry)
         env:
