@@ -20,6 +20,7 @@ try:
 except ImportError:
     EVIDENTLY_AVAILABLE = False
 
+from typing import Optional
 import logging
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,7 @@ class DriftMonitor:
             logger.error(f"[DRIFT] Evidently report failed: {e}")
             return {"status": "error", "error": str(e), "report_path": None}
 
-    def latest_report_path(self) -> str | None:
+    def latest_report_path(self) -> Optional[str]:
         """Return path to the most recent drift report, or None."""
         reports = sorted(Path(self.reports_dir).glob("*.html"), reverse=True)
         return str(reports[0]) if reports else None
