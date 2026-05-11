@@ -352,12 +352,57 @@ def get_base_dir():
         return os.path.dirname(os.path.abspath(__file__))
 
 
+def download_models_from_hub():
+    """Download model files from HuggingFace Hub model registry if not present locally."""
+    try:
+        from huggingface_hub import hf_hub_download
+        hf_username = os.getenv('HF_USERNAME', '')
+        hf_token    = os.getenv('HF_TOKEN', '')
+        repo_id     = f"{hf_username}/sales-sentiment-model" if hf_username else None
+
+        if not repo_id:
+            print("[STARTUP] HF_USERNAME not set — skipping model download from Hub")
+            return False
+
+        base_dir   = get_base_dir()
+        models_dir = os.path.join(base_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+
+        files = [
+            "sentiment_model_5000.pkl",
+            "tfidf_vectorizer_5000.pkl",
+            "label_encoder_5000.pkl",
+        ]
+        print(f"[STARTUP] Downloading models from HF Hub: {repo_id}")
+        for fname in files:
+            dest = os.path.join(models_dir, fname)
+            if not os.path.exists(dest):
+                downloaded = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=fname,
+                    token=hf_token or None,
+                    local_dir=models_dir,
+                )
+                print(f"[STARTUP] Downloaded: {fname}")
+            else:
+                print(f"[STARTUP] Already exists: {fname}")
+        return True
+    except Exception as e:
+        print(f"[STARTUP] Could not download models from HF Hub: {e}")
+        return False
+
+
 def load_models():
-    """Load the trained models"""
+    """Load the trained models — auto-downloads from HF Hub if missing."""
     base_dir = get_base_dir()
-    model_path = os.path.join(base_dir, "models", "sentiment_model_5000.pkl")
+    model_path     = os.path.join(base_dir, "models", "sentiment_model_5000.pkl")
     vectorizer_path = os.path.join(base_dir, "models", "tfidf_vectorizer_5000.pkl")
-    encoder_path = os.path.join(base_dir, "models", "label_encoder_5000.pkl")
+    encoder_path   = os.path.join(base_dir, "models", "label_encoder_5000.pkl")
+
+    # Try downloading from HF Hub if any file is missing
+    if not all(os.path.exists(p) for p in [model_path, vectorizer_path, encoder_path]):
+        print("[STARTUP] Model files not found locally — attempting HF Hub download...")
+        download_models_from_hub()
 
     if not all(os.path.exists(p) for p in [model_path, vectorizer_path, encoder_path]):
         missing = [p for p in [model_path, vectorizer_path, encoder_path] if not os.path.exists(p)]
